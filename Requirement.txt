@@ -1,0 +1,316 @@
+Build a production-grade React Native (Expo + TypeScript) mobile application for a multi-contractor Interior Invoice system.
+
+IMPORTANT:
+- Mobile only
+- Fully offline
+- No backend
+- SQLite database
+- Multi-company support
+- GST optional
+- Production-ready clean architecture
+- Professional UI
+
+====================================================
+CORE CONCEPT
+====================================================
+
+The app must support multiple interior contractors (companies).
+
+Each company has:
+- Company name
+- Owner name
+- Phone
+- Address
+- GST optional
+- Company logo
+- Separate invoice numbering
+
+User selects active company after login.
+
+====================================================
+GST FLEXIBILITY REQUIREMENT
+====================================================
+
+Each company contains:
+
+- hasGST (boolean)
+- gstNumber (nullable)
+- defaultGstPercent (nullable)
+
+If hasGST = true:
+    - Show GST number on invoice
+    - Show GST breakdown
+    - Calculate GST
+    - Invoice title: "TAX INVOICE"
+
+If hasGST = false:
+    - Hide GST number
+    - Do not calculate GST
+    - Hide GST section
+    - Invoice title: "INVOICE"
+    - Grand Total = Subtotal
+
+====================================================
+INVOICE ITEM CALCULATION SYSTEM
+====================================================
+
+Each invoice item must support 2 modes:
+
+1) AREA MODE
+2) DIRECT MODE
+
+---------------------------------
+AREA MODE
+---------------------------------
+
+User inputs:
+- Description
+- Length (Feet)
+- Length (Inches)
+- Width (Feet)
+- Width (Inches)
+- Quantity
+- Rate (per sqft)
+
+Calculation:
+
+lengthInFeet = lengthFeet + (lengthInches / 12)
+widthInFeet = widthFeet + (widthInches / 12)
+
+area = lengthInFeet * widthInFeet
+
+lineTotal = area * quantity * rate
+
+Display:
+- Calculated area (readonly)
+- Calculated line total (readonly)
+
+---------------------------------
+DIRECT MODE
+---------------------------------
+
+User inputs:
+- Description
+- Quantity
+- Rate
+
+Calculation:
+lineTotal = quantity * rate
+
+No area calculation.
+
+====================================================
+INVOICE TOTAL CALCULATION
+====================================================
+
+subtotal = sum(lineTotal of all items)
+
+If company.hasGST = true:
+    gstAmount = subtotal * (gstPercent / 100)
+    grandTotal = subtotal + gstAmount
+Else:
+    gstAmount = 0
+    grandTotal = subtotal
+
+balance = grandTotal - advance
+
+All monetary values must be rounded to 2 decimal places.
+
+====================================================
+SQLITE DATABASE STRUCTURE
+====================================================
+
+TABLE: companies
+--------------------------------
+id INTEGER PRIMARY KEY AUTOINCREMENT
+companyName TEXT NOT NULL
+ownerName TEXT
+phone TEXT
+address TEXT
+hasGST INTEGER DEFAULT 0
+gstNumber TEXT
+defaultGstPercent REAL
+logoPath TEXT
+invoicePrefix TEXT
+invoiceCounter INTEGER DEFAULT 1
+createdAt TEXT
+
+--------------------------------
+
+TABLE: invoices
+--------------------------------
+id INTEGER PRIMARY KEY AUTOINCREMENT
+companyId INTEGER NOT NULL
+invoiceNumber TEXT
+clientName TEXT NOT NULL
+clientPhone TEXT
+clientAddress TEXT
+subtotal REAL
+gstPercent REAL
+gstAmount REAL
+grandTotal REAL
+advance REAL
+balance REAL
+createdAt TEXT
+FOREIGN KEY(companyId) REFERENCES companies(id)
+
+--------------------------------
+
+TABLE: invoice_items
+--------------------------------
+id INTEGER PRIMARY KEY AUTOINCREMENT
+invoiceId INTEGER NOT NULL
+description TEXT
+calculationMode TEXT   -- AREA or DIRECT
+lengthFeet REAL
+lengthInches REAL
+widthFeet REAL
+widthInches REAL
+area REAL
+quantity REAL
+rate REAL
+lineTotal REAL
+FOREIGN KEY(invoiceId) REFERENCES invoices(id)
+
+====================================================
+INVOICE NUMBER FORMAT
+====================================================
+
+Invoice format:
+{PREFIX}-{YEAR}-{0001}
+
+Example:
+INT-2026-0001
+
+Each company maintains its own invoiceCounter.
+Increment counter after each saved invoice.
+
+====================================================
+APP FEATURES
+====================================================
+
+1) Company Management
+   - Create company
+   - Edit company
+   - Switch company
+
+2) Dashboard
+   - Total invoices count
+   - Total revenue
+   - Quick create invoice button
+
+3) Create Invoice
+   - Client details
+   - Dynamic add/remove items
+   - Mode toggle (AREA / DIRECT)
+   - Real-time calculation
+   - GST auto apply if enabled
+
+4) Invoice List
+   - Pagination
+   - Search by client name
+   - Filter by date
+
+5) Invoice Detail
+   - Full breakdown
+   - Preview PDF
+   - Export PDF
+   - Share PDF
+
+====================================================
+PDF REQUIREMENTS
+====================================================
+
+Professional layout including:
+
+Header:
+- Company Logo
+- Company Name
+- Address
+- Phone
+- GST (if applicable)
+
+Title:
+- "TAX INVOICE" or "INVOICE"
+
+Body:
+- Invoice Number
+- Date
+- Client details
+
+Items Table Columns:
+- Description
+- Mode
+- Size (if AREA)
+- Area
+- Qty
+- Rate
+- Line Total
+
+Footer:
+- Subtotal
+- GST (if applicable)
+- Grand Total (bold)
+- Advance
+- Balance
+- Signature placeholder
+
+====================================================
+TECH STACK
+====================================================
+
+- Expo
+- TypeScript (strict mode)
+- react-native-paper
+- react-navigation
+- react-hook-form
+- Zustand
+- react-native-sqlite-storage
+- react-native-html-to-pdf
+
+====================================================
+ARCHITECTURE STRUCTURE
+====================================================
+
+src/
+├── navigation/
+├── screens/
+├── components/
+├── database/
+│     ├── db.ts
+│     ├── migrations.ts
+├── repository/
+├── store/
+├── utils/
+│     ├── calculator.ts
+│     ├── invoiceNumber.ts
+├── services/
+│     ├── pdfService.ts
+├── theme/
+├── models/
+└── assets/
+
+Separate:
+- UI layer
+- Business logic
+- Database layer
+- PDF generator
+- Calculation engine
+
+====================================================
+DELIVERABLE
+====================================================
+
+Generate full runnable Expo project including:
+
+- package.json
+- App.tsx
+- Navigation setup
+- All screens
+- SQLite initialization
+- Invoice engine
+- PDF generator
+- Sample seed company
+- README with run instructions
+
+The code must be clean, modular, scalable, and production-ready.
