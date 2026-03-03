@@ -148,7 +148,9 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
                                 </Text>
                                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                                     {item.calculationMode === 'AREA'
-                                        ? `${item.lengthFeet}'${item.lengthInches}" × ${item.widthFeet}'${item.widthInches}" = ${item.area.toFixed(2)} sqft`
+                                        ? (item.lengthFeet === 0 && item.widthFeet === 0
+                                            ? `${item.lengthInches}" × ${item.widthInches}" = ${item.area.toFixed(2)} sqft`
+                                            : `${item.lengthFeet}'${item.lengthInches}" × ${item.widthFeet}'${item.widthInches}" = ${item.area.toFixed(2)} sqft`)
                                         : 'Direct'}
                                     {' • '}Qty: {item.quantity} × {formatCurrency(item.rate)}
                                 </Text>

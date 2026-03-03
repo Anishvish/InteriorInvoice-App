@@ -22,6 +22,7 @@ import { toast } from '../components/Toast';
 interface ItemForm {
     description: string;
     calculationMode: 'AREA' | 'DIRECT';
+    measurementUnit: 'FEET_INCHES' | 'INCHES_ONLY';
     lengthFeet: string;
     lengthInches: string;
     widthFeet: string;
@@ -42,6 +43,7 @@ interface InvoiceForm {
 const defaultItem: ItemForm = {
     description: '',
     calculationMode: 'AREA',
+    measurementUnit: 'FEET_INCHES',
     lengthFeet: '',
     lengthInches: '0',
     widthFeet: '',
@@ -99,6 +101,7 @@ export default function CreateInvoiceScreen({ navigation, route }: any) {
                 items: currentInvoice.items.map((item) => ({
                     description: item.description,
                     calculationMode: item.calculationMode,
+                    measurementUnit: (item as any).measurementUnit || 'FEET_INCHES',
                     lengthFeet: item.lengthFeet.toString(),
                     lengthInches: item.lengthInches.toString(),
                     widthFeet: item.widthFeet.toString(),
@@ -131,37 +134,46 @@ export default function CreateInvoiceScreen({ navigation, route }: any) {
     }, [append, addButtonScale]);
 
     const getItemCalcs = (item: ItemForm) => {
+        let lFeet = parseFloat(item.lengthFeet) || 0;
+        let lInches = parseFloat(item.lengthInches) || 0;
+        let wFeet = parseFloat(item.widthFeet) || 0;
+        let wInches = parseFloat(item.widthInches) || 0;
+
+        // For inches-only mode, treat the inches field as total inches
+        if (item.measurementUnit === 'INCHES_ONLY') {
+            lFeet = 0;
+            wFeet = 0;
+        }
+
         const partialItem: Partial<InvoiceItem> = {
             calculationMode: item.calculationMode,
-            lengthFeet: parseFloat(item.lengthFeet) || 0,
-            lengthInches: parseFloat(item.lengthInches) || 0,
-            widthFeet: parseFloat(item.widthFeet) || 0,
-            widthInches: parseFloat(item.widthInches) || 0,
+            lengthFeet: lFeet,
+            lengthInches: lInches,
+            widthFeet: wFeet,
+            widthInches: wInches,
             quantity: parseFloat(item.quantity) || 0,
             rate: parseFloat(item.rate) || 0,
         };
         const area = item.calculationMode === 'AREA'
-            ? calculateArea(
-                parseFloat(item.lengthFeet) || 0,
-                parseFloat(item.lengthInches) || 0,
-                parseFloat(item.widthFeet) || 0,
-                parseFloat(item.widthInches) || 0
-            )
+            ? calculateArea(lFeet, lInches, wFeet, wInches)
             : 0;
         const lineTotal = calculateLineTotal(partialItem);
         return { area, lineTotal };
     };
 
     const getTotals = () => {
-        const partialItems = (watchedItems || []).map((item) => ({
-            calculationMode: item.calculationMode,
-            lengthFeet: parseFloat(item.lengthFeet) || 0,
-            lengthInches: parseFloat(item.lengthInches) || 0,
-            widthFeet: parseFloat(item.widthFeet) || 0,
-            widthInches: parseFloat(item.widthInches) || 0,
-            quantity: parseFloat(item.quantity) || 0,
-            rate: parseFloat(item.rate) || 0,
-        }));
+        const partialItems = (watchedItems || []).map((item) => {
+            const isInchesOnly = item.measurementUnit === 'INCHES_ONLY';
+            return {
+                calculationMode: item.calculationMode,
+                lengthFeet: isInchesOnly ? 0 : (parseFloat(item.lengthFeet) || 0),
+                lengthInches: parseFloat(item.lengthInches) || 0,
+                widthFeet: isInchesOnly ? 0 : (parseFloat(item.widthFeet) || 0),
+                widthInches: parseFloat(item.widthInches) || 0,
+                quantity: parseFloat(item.quantity) || 0,
+                rate: parseFloat(item.rate) || 0,
+            };
+        });
         return calculateInvoiceTotals(
             partialItems,
             activeCompany?.hasGST || false,
@@ -184,12 +196,13 @@ export default function CreateInvoiceScreen({ navigation, route }: any) {
         try {
             const items = data.items.map((item) => {
                 const calcs = getItemCalcs(item);
+                const isInchesOnly = item.measurementUnit === 'INCHES_ONLY';
                 return {
                     description: item.description,
                     calculationMode: item.calculationMode as 'AREA' | 'DIRECT',
-                    lengthFeet: parseFloat(item.lengthFeet) || 0,
+                    lengthFeet: isInchesOnly ? 0 : (parseFloat(item.lengthFeet) || 0),
                     lengthInches: parseFloat(item.lengthInches) || 0,
-                    widthFeet: parseFloat(item.widthFeet) || 0,
+                    widthFeet: isInchesOnly ? 0 : (parseFloat(item.widthFeet) || 0),
                     widthInches: parseFloat(item.widthInches) || 0,
                     area: calcs.area,
                     quantity: parseFloat(item.quantity) || 0,
@@ -404,77 +417,134 @@ export default function CreateInvoiceScreen({ navigation, route }: any) {
 
                                     {item?.calculationMode === 'AREA' && (
                                         <>
-                                            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8, marginBottom: 4 }}>
-                                                Length
-                                            </Text>
-                                            <View style={styles.row}>
-                                                <Controller
-                                                    control={control}
-                                                    name={`items.${index}.lengthFeet`}
-                                                    render={({ field: { onChange, value } }) => (
-                                                        <TextInput
-                                                            label="Feet"
-                                                            value={value}
-                                                            onChangeText={onChange}
-                                                            mode="outlined"
-                                                            keyboardType="numeric"
-                                                            style={[styles.input, { flex: 1 }]}
-                                                            dense
-                                                        />
-                                                    )}
-                                                />
-                                                <Controller
-                                                    control={control}
-                                                    name={`items.${index}.lengthInches`}
-                                                    render={({ field: { onChange, value } }) => (
-                                                        <TextInput
-                                                            label="Inches"
-                                                            value={value}
-                                                            onChangeText={onChange}
-                                                            mode="outlined"
-                                                            keyboardType="numeric"
-                                                            style={[styles.input, { flex: 1, marginLeft: 8 }]}
-                                                            dense
-                                                        />
-                                                    )}
-                                                />
-                                            </View>
+                                            {/* Measurement Unit Toggle */}
+                                            <Controller
+                                                control={control}
+                                                name={`items.${index}.measurementUnit`}
+                                                render={({ field: { onChange, value } }) => (
+                                                    <SegmentedButtons
+                                                        value={value || 'FEET_INCHES'}
+                                                        onValueChange={onChange}
+                                                        buttons={[
+                                                            { value: 'FEET_INCHES', label: "Feet & Inches", icon: 'ruler' },
+                                                            { value: 'INCHES_ONLY', label: 'Inches Only', icon: 'ruler-square' },
+                                                        ]}
+                                                        style={{ marginBottom: 12 }}
+                                                        density="small"
+                                                    />
+                                                )}
+                                            />
 
-                                            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
-                                                Width
-                                            </Text>
-                                            <View style={styles.row}>
-                                                <Controller
-                                                    control={control}
-                                                    name={`items.${index}.widthFeet`}
-                                                    render={({ field: { onChange, value } }) => (
-                                                        <TextInput
-                                                            label="Feet"
-                                                            value={value}
-                                                            onChangeText={onChange}
-                                                            mode="outlined"
-                                                            keyboardType="numeric"
-                                                            style={[styles.input, { flex: 1 }]}
-                                                            dense
+                                            {item?.measurementUnit === 'INCHES_ONLY' ? (
+                                                <>
+                                                    <View style={styles.row}>
+                                                        <Controller
+                                                            control={control}
+                                                            name={`items.${index}.lengthInches`}
+                                                            render={({ field: { onChange, value } }) => (
+                                                                <TextInput
+                                                                    label="Length (inches)"
+                                                                    value={value}
+                                                                    onChangeText={onChange}
+                                                                    mode="outlined"
+                                                                    keyboardType="numeric"
+                                                                    style={[styles.input, { flex: 1 }]}
+                                                                    dense
+                                                                />
+                                                            )}
                                                         />
-                                                    )}
-                                                />
-                                                <Controller
-                                                    control={control}
-                                                    name={`items.${index}.widthInches`}
-                                                    render={({ field: { onChange, value } }) => (
-                                                        <TextInput
-                                                            label="Inches"
-                                                            value={value}
-                                                            onChangeText={onChange}
-                                                            mode="outlined"
-                                                            keyboardType="numeric"
-                                                            style={[styles.input, { flex: 1, marginLeft: 8 }]}
-                                                            dense
+                                                        <Controller
+                                                            control={control}
+                                                            name={`items.${index}.widthInches`}
+                                                            render={({ field: { onChange, value } }) => (
+                                                                <TextInput
+                                                                    label="Width (inches)"
+                                                                    value={value}
+                                                                    onChangeText={onChange}
+                                                                    mode="outlined"
+                                                                    keyboardType="numeric"
+                                                                    style={[styles.input, { flex: 1, marginLeft: 8 }]}
+                                                                    dense
+                                                                />
+                                                            )}
                                                         />
-                                                    )}
-                                                />
-                                            </View>
+                                                    </View>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4, marginBottom: 4 }}>
+                                                        Length
+                                                    </Text>
+                                                    <View style={styles.row}>
+                                                        <Controller
+                                                            control={control}
+                                                            name={`items.${index}.lengthFeet`}
+                                                            render={({ field: { onChange, value } }) => (
+                                                                <TextInput
+                                                                    label="Feet"
+                                                                    value={value}
+                                                                    onChangeText={onChange}
+                                                                    mode="outlined"
+                                                                    keyboardType="numeric"
+                                                                    style={[styles.input, { flex: 1 }]}
+                                                                    dense
+                                                                />
+                                                            )}
+                                                        />
+                                                        <Controller
+                                                            control={control}
+                                                            name={`items.${index}.lengthInches`}
+                                                            render={({ field: { onChange, value } }) => (
+                                                                <TextInput
+                                                                    label="Inches"
+                                                                    value={value}
+                                                                    onChangeText={onChange}
+                                                                    mode="outlined"
+                                                                    keyboardType="numeric"
+                                                                    style={[styles.input, { flex: 1, marginLeft: 8 }]}
+                                                                    dense
+                                                                />
+                                                            )}
+                                                        />
+                                                    </View>
+
+                                                    <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                                                        Width
+                                                    </Text>
+                                                    <View style={styles.row}>
+                                                        <Controller
+                                                            control={control}
+                                                            name={`items.${index}.widthFeet`}
+                                                            render={({ field: { onChange, value } }) => (
+                                                                <TextInput
+                                                                    label="Feet"
+                                                                    value={value}
+                                                                    onChangeText={onChange}
+                                                                    mode="outlined"
+                                                                    keyboardType="numeric"
+                                                                    style={[styles.input, { flex: 1 }]}
+                                                                    dense
+                                                                />
+                                                            )}
+                                                        />
+                                                        <Controller
+                                                            control={control}
+                                                            name={`items.${index}.widthInches`}
+                                                            render={({ field: { onChange, value } }) => (
+                                                                <TextInput
+                                                                    label="Inches"
+                                                                    value={value}
+                                                                    onChangeText={onChange}
+                                                                    mode="outlined"
+                                                                    keyboardType="numeric"
+                                                                    style={[styles.input, { flex: 1, marginLeft: 8 }]}
+                                                                    dense
+                                                                />
+                                                            )}
+                                                        />
+                                                    </View>
+                                                </>
+                                            )}
 
                                             <Surface style={[styles.calcResult, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
                                                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
