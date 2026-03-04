@@ -20,6 +20,9 @@ interface InvoiceStore {
     loadDashboardStats: (companyId: number) => Promise<void>;
     removeInvoice: (invoiceId: number) => Promise<void>;
     editInvoice: (invoiceId: number, invoice: Partial<Omit<Invoice, 'id'>>, items: any[]) => Promise<void>;
+    recordPayment: (invoiceId: number, amount: number) => Promise<void>;
+    markAsPaid: (invoiceId: number) => Promise<void>;
+    markAsUnpaid: (invoiceId: number) => Promise<void>;
     setSearchQuery: (query: string) => void;
     clearCurrentInvoice: () => void;
 }
@@ -66,7 +69,25 @@ export const useInvoiceStore = create<InvoiceStore>((set, get) => ({
 
     editInvoice: async (invoiceId, invoice, items) => {
         await invoiceRepo.updateInvoice(invoiceId, invoice, items);
+        const updated = await invoiceRepo.getInvoiceWithItems(invoiceId);
+        set({ currentInvoice: updated });
+    },
+
+    recordPayment: async (invoiceId, amount) => {
+        await invoiceRepo.recordPayment(invoiceId, amount);
         // Refresh the current invoice detail
+        const updated = await invoiceRepo.getInvoiceWithItems(invoiceId);
+        set({ currentInvoice: updated });
+    },
+
+    markAsPaid: async (invoiceId) => {
+        await invoiceRepo.markAsPaid(invoiceId);
+        const updated = await invoiceRepo.getInvoiceWithItems(invoiceId);
+        set({ currentInvoice: updated });
+    },
+
+    markAsUnpaid: async (invoiceId) => {
+        await invoiceRepo.markAsUnpaid(invoiceId);
         const updated = await invoiceRepo.getInvoiceWithItems(invoiceId);
         set({ currentInvoice: updated });
     },

@@ -1,15 +1,23 @@
 // ==========================================
 // Dashboard Screen
+// With payment status stats
 // ==========================================
 
 import React, { useEffect, useCallback } from 'react';
 import { View, ScrollView, StyleSheet, RefreshControl } from 'react-native';
-import { Card, Text, FAB, useTheme, Surface, Divider } from 'react-native-paper';
+import { Card, Text, FAB, useTheme, Surface, Divider, Chip } from 'react-native-paper';
 import { useCompanyStore } from '../store/companyStore';
 import { useInvoiceStore } from '../store/invoiceStore';
 import { formatCurrency } from '../utils/calculator';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { PaymentStatus } from '../models/types';
+
+const STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string; bg: string; icon: string }> = {
+    PAID: { label: 'PAID', color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle' },
+    PARTIAL: { label: 'PARTIAL', color: '#E65100', bg: '#FFF3E0', icon: 'clock-outline' },
+    UNPAID: { label: 'UNPAID', color: '#C62828', bg: '#FFEBEE', icon: 'alert-circle-outline' },
+};
 
 export default function DashboardScreen({ navigation }: any) {
     const theme = useTheme();
@@ -49,7 +57,10 @@ export default function DashboardScreen({ navigation }: any) {
         );
     }
 
-    const stats = dashboardStats || { totalInvoices: 0, totalRevenue: 0, totalPending: 0, recentInvoices: [] };
+    const stats = dashboardStats || {
+        totalInvoices: 0, totalRevenue: 0, totalPending: 0, totalCollected: 0,
+        paidInvoices: 0, partialInvoices: 0, unpaidInvoices: 0, recentInvoices: [],
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -72,7 +83,7 @@ export default function DashboardScreen({ navigation }: any) {
                     </View>
                 </Surface>
 
-                {/* Stats Cards */}
+                {/* Revenue Stats */}
                 <View style={styles.statsRow}>
                     <Surface style={[styles.statCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
                         <MaterialCommunityIcons name="file-document-outline" size={28} color={theme.colors.primary} />
@@ -92,14 +103,52 @@ export default function DashboardScreen({ navigation }: any) {
                 </View>
 
                 <View style={styles.statsRow}>
-                    <Surface style={[styles.statCard, { backgroundColor: theme.colors.surface, flex: 1 }]} elevation={1}>
+                    <Surface style={[styles.statCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
+                        <MaterialCommunityIcons name="cash-check" size={28} color="#4CAF50" />
+                        <Text variant="headlineMedium" style={[styles.statValue, { color: '#4CAF50' }]}>
+                            {formatCurrency(stats.totalCollected)}
+                        </Text>
+                        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Collected</Text>
+                    </Surface>
+
+                    <Surface style={[styles.statCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
                         <MaterialCommunityIcons name="clock-alert-outline" size={28} color="#FF6B6B" />
                         <Text variant="headlineMedium" style={[styles.statValue, { color: '#FF6B6B' }]}>
                             {formatCurrency(stats.totalPending)}
                         </Text>
-                        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Pending Balance</Text>
+                        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Pending</Text>
                     </Surface>
                 </View>
+
+                {/* Payment Status Breakdown */}
+                <Surface style={[styles.statusBreakdown, { backgroundColor: theme.colors.surface }]} elevation={1}>
+                    <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.onSurface, marginBottom: 12 }}>
+                        Payment Status
+                    </Text>
+                    <View style={styles.statusRow}>
+                        <View style={[styles.statusItem, { backgroundColor: '#E8F5E9' }]}>
+                            <MaterialCommunityIcons name="check-circle" size={20} color="#2E7D32" />
+                            <Text variant="titleMedium" style={{ fontWeight: '700', color: '#2E7D32' }}>
+                                {stats.paidInvoices}
+                            </Text>
+                            <Text variant="labelSmall" style={{ color: '#2E7D32' }}>Paid</Text>
+                        </View>
+                        <View style={[styles.statusItem, { backgroundColor: '#FFF3E0' }]}>
+                            <MaterialCommunityIcons name="clock-outline" size={20} color="#E65100" />
+                            <Text variant="titleMedium" style={{ fontWeight: '700', color: '#E65100' }}>
+                                {stats.partialInvoices}
+                            </Text>
+                            <Text variant="labelSmall" style={{ color: '#E65100' }}>Partial</Text>
+                        </View>
+                        <View style={[styles.statusItem, { backgroundColor: '#FFEBEE' }]}>
+                            <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#C62828" />
+                            <Text variant="titleMedium" style={{ fontWeight: '700', color: '#C62828' }}>
+                                {stats.unpaidInvoices}
+                            </Text>
+                            <Text variant="labelSmall" style={{ color: '#C62828' }}>Unpaid</Text>
+                        </View>
+                    </View>
+                </Surface>
 
                 {/* Recent Invoices */}
                 <View style={styles.sectionHeader}>
@@ -116,34 +165,48 @@ export default function DashboardScreen({ navigation }: any) {
                         </Text>
                     </Surface>
                 ) : (
-                    stats.recentInvoices.map((invoice) => (
-                        <Card
-                            key={invoice.id}
-                            style={[styles.invoiceCard, { backgroundColor: theme.colors.surface }]}
-                            onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
-                        >
-                            <Card.Content style={styles.invoiceCardContent}>
-                                <View style={{ flex: 1 }}>
-                                    <Text variant="titleSmall" style={{ fontWeight: '600', color: theme.colors.onSurface }}>
-                                        {invoice.clientName}
-                                    </Text>
-                                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                                        {invoice.invoiceNumber} • {new Date(invoice.createdAt).toLocaleDateString('en-IN')}
-                                    </Text>
-                                </View>
-                                <View style={{ alignItems: 'flex-end' }}>
-                                    <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.primary }}>
-                                        {formatCurrency(invoice.grandTotal)}
-                                    </Text>
-                                    {invoice.balance > 0 && (
-                                        <Text variant="labelSmall" style={{ color: '#FF6B6B' }}>
-                                            Due: {formatCurrency(invoice.balance)}
+                    stats.recentInvoices.map((invoice) => {
+                        const statusCfg = STATUS_CONFIG[invoice.paymentStatus] || STATUS_CONFIG.UNPAID;
+                        return (
+                            <Card
+                                key={invoice.id}
+                                style={[styles.invoiceCard, { backgroundColor: theme.colors.surface }]}
+                                onPress={() => navigation.navigate('InvoiceDetail', { invoiceId: invoice.id })}
+                            >
+                                <Card.Content style={styles.invoiceCardContent}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text variant="titleSmall" style={{ fontWeight: '600', color: theme.colors.onSurface }}>
+                                            {invoice.clientName}
                                         </Text>
-                                    )}
-                                </View>
-                            </Card.Content>
-                        </Card>
-                    ))
+                                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                            {invoice.invoiceNumber} • {new Date(invoice.createdAt).toLocaleDateString('en-IN')}
+                                        </Text>
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text variant="titleSmall" style={{ fontWeight: '700', color: theme.colors.primary }}>
+                                            {formatCurrency(invoice.grandTotal)}
+                                        </Text>
+                                        <Chip
+                                            mode="flat"
+                                            compact
+                                            style={{
+                                                backgroundColor: statusCfg.bg,
+                                                marginTop: 4,
+                                                height: 22,
+                                            }}
+                                            textStyle={{
+                                                color: statusCfg.color,
+                                                fontSize: 9,
+                                                fontWeight: '700',
+                                            }}
+                                        >
+                                            {statusCfg.label}
+                                        </Chip>
+                                    </View>
+                                </Card.Content>
+                            </Card>
+                        );
+                    })
                 )}
             </ScrollView>
 
@@ -167,6 +230,15 @@ const styles = StyleSheet.create({
     statsRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
     statCard: { flex: 1, borderRadius: 16, padding: 16, alignItems: 'center' },
     statValue: { fontWeight: '700', marginTop: 8, marginBottom: 4, fontSize: 18 },
+    statusBreakdown: { borderRadius: 16, padding: 16, marginBottom: 12 },
+    statusRow: { flexDirection: 'row', gap: 8 },
+    statusItem: {
+        flex: 1,
+        borderRadius: 12,
+        padding: 12,
+        alignItems: 'center',
+        gap: 4,
+    },
     sectionHeader: { marginTop: 8, marginBottom: 12 },
     emptyCard: { borderRadius: 16, padding: 32, alignItems: 'center' },
     invoiceCard: { borderRadius: 12, marginBottom: 8 },

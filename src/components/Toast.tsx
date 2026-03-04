@@ -76,23 +76,23 @@ function SingleToast({ toast: toastData, onDismiss }: { toast: ToastState; onDis
     const duration = toastData.duration || 3000;
 
     useEffect(() => {
-        // Entrance animation — spring with bounce
+        // Entrance animation — fast slide-in with smooth timing
         Animated.parallel([
             Animated.spring(translateY, {
                 toValue: 0,
-                tension: 80,
-                friction: 9,
+                tension: 120,
+                friction: 12,
                 useNativeDriver: true,
             }),
             Animated.timing(opacity, {
                 toValue: 1,
-                duration: 250,
+                duration: 200,
                 useNativeDriver: true,
             }),
             Animated.spring(scale, {
                 toValue: 1,
-                tension: 100,
-                friction: 8,
+                tension: 120,
+                friction: 10,
                 useNativeDriver: true,
             }),
         ]).start();
@@ -115,18 +115,18 @@ function SingleToast({ toast: toastData, onDismiss }: { toast: ToastState; onDis
     const dismissToast = () => {
         Animated.parallel([
             Animated.timing(translateY, {
-                toValue: -100,
-                duration: 300,
+                toValue: -80,
+                duration: 200,
                 useNativeDriver: true,
             }),
             Animated.timing(opacity, {
                 toValue: 0,
-                duration: 250,
+                duration: 180,
                 useNativeDriver: true,
             }),
             Animated.timing(scale, {
-                toValue: 0.85,
-                duration: 250,
+                toValue: 0.9,
+                duration: 180,
                 useNativeDriver: true,
             }),
         ]).start(() => onDismiss());

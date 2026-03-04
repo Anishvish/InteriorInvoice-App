@@ -2,6 +2,8 @@
 // Interior Invoice System - Type Definitions
 // ==========================================
 
+export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID';
+
 export interface Company {
   id?: number;
   companyName: string;
@@ -30,6 +32,7 @@ export interface Invoice {
   grandTotal: number;
   advance: number;
   balance: number;
+  paymentStatus: PaymentStatus;
   createdAt: string;
 }
 
@@ -56,6 +59,10 @@ export interface DashboardStats {
   totalInvoices: number;
   totalRevenue: number;
   totalPending: number;
+  totalCollected: number;
+  paidInvoices: number;
+  partialInvoices: number;
+  unpaidInvoices: number;
   recentInvoices: Invoice[];
 }
 

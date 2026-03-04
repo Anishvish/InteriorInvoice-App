@@ -1,23 +1,34 @@
 // ==========================================
 // Invoice Detail Screen
+// With payment status & "Record Payment" / "Mark as Paid" actions
 // ==========================================
 
 import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet, Alert } from 'react-native';
-import { Text, useTheme, Surface, Button, Divider, DataTable, ActivityIndicator, IconButton } from 'react-native-paper';
+import { Text, useTheme, Surface, Button, Divider, ActivityIndicator, Chip, TextInput, Portal, Modal } from 'react-native-paper';
 import { useInvoiceStore } from '../store/invoiceStore';
 import { useCompanyStore } from '../store/companyStore';
 import { formatCurrency } from '../utils/calculator';
 import { sharePDF, previewPDF } from '../services/pdfService';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { toast } from '../components/Toast';
+import { PaymentStatus } from '../models/types';
+
+const STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string; bg: string; icon: string }> = {
+    PAID: { label: 'PAID', color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle' },
+    PARTIAL: { label: 'PARTIAL', color: '#E65100', bg: '#FFF3E0', icon: 'clock-outline' },
+    UNPAID: { label: 'UNPAID', color: '#C62828', bg: '#FFEBEE', icon: 'alert-circle-outline' },
+};
 
 export default function InvoiceDetailScreen({ navigation, route }: any) {
     const theme = useTheme();
     const { invoiceId } = route.params;
-    const { currentInvoice, loadInvoiceDetail, removeInvoice, clearCurrentInvoice, loading } = useInvoiceStore();
+    const { currentInvoice, loadInvoiceDetail, removeInvoice, clearCurrentInvoice, loading, recordPayment, markAsPaid, markAsUnpaid } = useInvoiceStore();
     const { activeCompany } = useCompanyStore();
     const [pdfLoading, setPdfLoading] = useState(false);
+    const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [paymentLoading, setPaymentLoading] = useState(false);
 
     useEffect(() => {
         loadInvoiceDetail(invoiceId);
@@ -74,6 +85,52 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
         ]);
     };
 
+    const handleMarkAsPaid = () => {
+        Alert.alert('Mark as Paid', 'This will mark the full amount as received. Continue?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Mark Paid',
+                onPress: async () => {
+                    await markAsPaid(invoiceId);
+                    toast.success('Invoice marked as paid!');
+                },
+            },
+        ]);
+    };
+
+    const handleMarkAsUnpaid = () => {
+        Alert.alert('Mark as Unpaid', 'This will reset the payment to zero. Continue?', [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Reset',
+                style: 'destructive',
+                onPress: async () => {
+                    await markAsUnpaid(invoiceId);
+                    toast.success('Invoice marked as unpaid.');
+                },
+            },
+        ]);
+    };
+
+    const handleRecordPayment = async () => {
+        const amount = parseFloat(paymentAmount);
+        if (!amount || amount <= 0) {
+            toast.error('Please enter a valid amount');
+            return;
+        }
+        setPaymentLoading(true);
+        try {
+            await recordPayment(invoiceId, amount);
+            toast.success(`Payment of ${formatCurrency(amount)} recorded!`);
+            setPaymentModalVisible(false);
+            setPaymentAmount('');
+        } catch (error) {
+            toast.error('Failed to record payment');
+        } finally {
+            setPaymentLoading(false);
+        }
+    };
+
     if (loading || !currentInvoice) {
         return (
             <View style={[styles.center, { backgroundColor: theme.colors.background }]}>
@@ -84,6 +141,7 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
 
     const invoice = currentInvoice;
     const isGST = activeCompany?.hasGST && invoice.gstAmount > 0;
+    const status = STATUS_CONFIG[invoice.paymentStatus] || STATUS_CONFIG.UNPAID;
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -100,6 +158,15 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
                             </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
+                            <Chip
+                                mode="flat"
+                                compact
+                                icon={() => <MaterialCommunityIcons name={status.icon as any} size={14} color={status.color} />}
+                                style={{ backgroundColor: status.bg, marginBottom: 6 }}
+                                textStyle={{ color: status.color, fontSize: 11, fontWeight: '700' }}
+                            >
+                                {status.label}
+                            </Chip>
                             <Text variant="labelSmall" style={{ color: 'rgba(255,255,255,0.7)' }}>Date</Text>
                             <Text variant="bodyMedium" style={{ color: '#FFFFFF', fontWeight: '600' }}>
                                 {new Date(invoice.createdAt).toLocaleDateString('en-IN', {
@@ -192,7 +259,7 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
                     </View>
 
                     <View style={styles.totalRow}>
-                        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>Advance Paid</Text>
+                        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>Amount Received</Text>
                         <Text variant="bodyMedium" style={{ fontWeight: '600', color: '#4CAF50' }}>
                             - {formatCurrency(invoice.advance)}
                         </Text>
@@ -208,6 +275,67 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
                             {formatCurrency(invoice.balance)}
                         </Text>
                     </View>
+                </Surface>
+
+                {/* Payment Actions */}
+                <Surface style={[styles.section, { backgroundColor: theme.colors.surface }]} elevation={1}>
+                    <View style={styles.sectionRow}>
+                        <MaterialCommunityIcons name="cash-multiple" size={20} color={theme.colors.primary} />
+                        <Text variant="titleSmall" style={[styles.sectionLabel, { color: theme.colors.primary }]}>
+                            Payment
+                        </Text>
+                        <Chip
+                            mode="flat"
+                            compact
+                            style={{ backgroundColor: status.bg, marginLeft: 'auto' }}
+                            textStyle={{ color: status.color, fontSize: 10, fontWeight: '700' }}
+                        >
+                            {status.label}
+                        </Chip>
+                    </View>
+
+                    {invoice.paymentStatus !== 'PAID' ? (
+                        <View style={styles.paymentActions}>
+                            <Button
+                                mode="contained"
+                                icon="cash-plus"
+                                onPress={() => setPaymentModalVisible(true)}
+                                style={[styles.paymentBtn, { flex: 1 }]}
+                                contentStyle={{ paddingVertical: 4 }}
+                                buttonColor="#FF9800"
+                            >
+                                Record Payment
+                            </Button>
+                            <Button
+                                mode="contained"
+                                icon="check-circle"
+                                onPress={handleMarkAsPaid}
+                                style={[styles.paymentBtn, { flex: 1, marginLeft: 8 }]}
+                                contentStyle={{ paddingVertical: 4 }}
+                                buttonColor="#4CAF50"
+                            >
+                                Mark Paid
+                            </Button>
+                        </View>
+                    ) : (
+                        <View style={styles.paymentActions}>
+                            <Surface style={[styles.paidBanner, { backgroundColor: '#E8F5E9' }]} elevation={0}>
+                                <MaterialCommunityIcons name="check-circle" size={24} color="#4CAF50" />
+                                <Text variant="bodyMedium" style={{ color: '#2E7D32', fontWeight: '700', marginLeft: 8 }}>
+                                    Fully Paid
+                                </Text>
+                            </Surface>
+                            <Button
+                                mode="outlined"
+                                icon="undo"
+                                onPress={handleMarkAsUnpaid}
+                                style={[styles.paymentBtn, { marginTop: 8 }]}
+                                textColor={theme.colors.error}
+                            >
+                                Reset Payment
+                            </Button>
+                        </View>
+                    )}
                 </Surface>
 
                 {/* Actions */}
@@ -253,6 +381,79 @@ export default function InvoiceDetailScreen({ navigation, route }: any) {
                     Delete Invoice
                 </Button>
             </ScrollView>
+
+            {/* Record Payment Modal */}
+            <Portal>
+                <Modal
+                    visible={paymentModalVisible}
+                    onDismiss={() => {
+                        setPaymentModalVisible(false);
+                        setPaymentAmount('');
+                    }}
+                    contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}
+                >
+                    <Text variant="titleLarge" style={{ fontWeight: '700', color: theme.colors.onSurface, marginBottom: 8 }}>
+                        Record Payment
+                    </Text>
+                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
+                        Balance due: {formatCurrency(invoice.balance)}
+                    </Text>
+
+                    <TextInput
+                        label="Payment Amount"
+                        value={paymentAmount}
+                        onChangeText={setPaymentAmount}
+                        mode="outlined"
+                        keyboardType="numeric"
+                        left={<TextInput.Affix text="₹" />}
+                        style={{ marginBottom: 8 }}
+                        autoFocus
+                    />
+
+                    {/* Quick fill buttons */}
+                    <View style={styles.quickFillRow}>
+                        <Button
+                            mode="outlined"
+                            compact
+                            onPress={() => setPaymentAmount(invoice.balance.toString())}
+                            style={styles.quickFillBtn}
+                        >
+                            Full Balance
+                        </Button>
+                        {invoice.balance > 0 && (
+                            <Button
+                                mode="outlined"
+                                compact
+                                onPress={() => setPaymentAmount(Math.round(invoice.balance / 2).toString())}
+                                style={[styles.quickFillBtn, { marginLeft: 8 }]}
+                            >
+                                Half
+                            </Button>
+                        )}
+                    </View>
+
+                    <View style={styles.modalActions}>
+                        <Button
+                            mode="text"
+                            onPress={() => {
+                                setPaymentModalVisible(false);
+                                setPaymentAmount('');
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            mode="contained"
+                            onPress={handleRecordPayment}
+                            loading={paymentLoading}
+                            disabled={paymentLoading}
+                            buttonColor="#4CAF50"
+                        >
+                            Record Payment
+                        </Button>
+                    </View>
+                </Modal>
+            </Portal>
         </View>
     );
 }
@@ -273,4 +474,28 @@ const styles = StyleSheet.create({
     actionBtn: { borderRadius: 12 },
     actionBtnContent: { paddingVertical: 6 },
     deleteBtn: { borderRadius: 12 },
+    paymentActions: { marginTop: 4 },
+    paymentBtn: { borderRadius: 12 },
+    paidBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+        padding: 16,
+    },
+    modal: {
+        margin: 20,
+        borderRadius: 20,
+        padding: 24,
+    },
+    quickFillRow: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
+    quickFillBtn: { borderRadius: 8 },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 8,
+    },
 });

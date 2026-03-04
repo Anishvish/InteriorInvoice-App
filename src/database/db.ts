@@ -7,14 +7,14 @@ import * as SQLite from 'expo-sqlite';
 let db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-    if (db) return db;
-    db = await SQLite.openDatabaseAsync('interior_invoice.db');
-    await runMigrations(db);
-    return db;
+  if (db) return db;
+  db = await SQLite.openDatabaseAsync('interior_invoice.db');
+  await runMigrations(db);
+  return db;
 }
 
 async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
-    await database.execAsync(`
+  await database.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
 
@@ -46,6 +46,7 @@ async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
       grandTotal REAL,
       advance REAL,
       balance REAL,
+      paymentStatus TEXT DEFAULT 'UNPAID',
       createdAt TEXT,
       FOREIGN KEY(companyId) REFERENCES companies(id)
     );
@@ -66,30 +67,53 @@ async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
       FOREIGN KEY(invoiceId) REFERENCES invoices(id)
     );
   `);
+
+  // --- Migration: add paymentStatus column for existing databases ---
+  try {
+    const tableInfo = await database.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(invoices)"
+    );
+    const hasPaymentStatus = tableInfo.some((col) => col.name === 'paymentStatus');
+    if (!hasPaymentStatus) {
+      await database.execAsync(
+        "ALTER TABLE invoices ADD COLUMN paymentStatus TEXT DEFAULT 'UNPAID'"
+      );
+      // Auto-set status for existing invoices based on advance vs grandTotal
+      await database.execAsync(`
+                UPDATE invoices SET paymentStatus = CASE
+                    WHEN advance >= grandTotal AND grandTotal > 0 THEN 'PAID'
+                    WHEN advance > 0 THEN 'PARTIAL'
+                    ELSE 'UNPAID'
+                END
+            `);
+    }
+  } catch (e) {
+    // Column might already exist — safe to ignore
+  }
 }
 
 export async function seedSampleCompany(): Promise<void> {
-    const database = await getDatabase();
-    const result = await database.getFirstAsync<{ count: number }>(
-        'SELECT COUNT(*) as count FROM companies'
-    );
+  const database = await getDatabase();
+  const result = await database.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM companies'
+  );
 
-    if (result && result.count === 0) {
-        await database.runAsync(
-            `INSERT INTO companies (companyName, ownerName, phone, address, hasGST, gstNumber, defaultGstPercent, invoicePrefix, invoiceCounter, createdAt)
+  if (result && result.count === 0) {
+    await database.runAsync(
+      `INSERT INTO companies (companyName, ownerName, phone, address, hasGST, gstNumber, defaultGstPercent, invoicePrefix, invoiceCounter, createdAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                'Elite Interiors',
-                'Rajesh Kumar',
-                '+91 98765 43210',
-                '123 MG Road, Bangalore, Karnataka 560001',
-                1,
-                '29ABCDE1234F1Z5',
-                18,
-                'EI',
-                1,
-                new Date().toISOString(),
-            ]
-        );
-    }
+      [
+        'Elite Interiors',
+        'Rajesh Kumar',
+        '+91 98765 43210',
+        '123 MG Road, Bangalore, Karnataka 560001',
+        1,
+        '29ABCDE1234F1Z5',
+        18,
+        'EI',
+        1,
+        new Date().toISOString(),
+      ]
+    );
+  }
 }
